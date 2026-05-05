@@ -2,6 +2,7 @@
 .env
 credentials.json
 token.json
+agent.log
 
 # Generated data
 db/

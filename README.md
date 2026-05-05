@@ -7,11 +7,11 @@ AI-powered Gmail agent that tracks job applications, classifies recruiter emails
 ```
 Gmail API (read-only)
     ↓
-EmailClassifier (Claude API)    → Labels each email with type, company, stage
+EmailClassifier (Groq API)      → Labels each email with type, company, stage
     ↓
 ApplicationTracker (SQLite)     → Persists state machine per application
     ↓
-ReportGenerator (Claude API)    → Analyzes patterns, flags keyword gaps
+ReportGenerator (Groq API)      → Analyzes patterns, flags keyword gaps
     ↓
 Flask Server + Web Dashboard    → Local UI at localhost:5050
 ```
@@ -27,11 +27,12 @@ source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Anthropic API key
+### 2. Groq API key
 
 ```bash
 cp .env.example .env
-# Edit .env and add your ANTHROPIC_API_KEY
+# Edit .env and add your GROQ_API_KEY
+
 ```
 
 ### 3. Gmail API credentials (one-time setup)
@@ -162,9 +163,9 @@ job-tracker-agent/
 ├── src/
 │   ├── agent.py            ← Main orchestrator + scheduler
 │   ├── gmail_client.py     ← Gmail OAuth + email fetching
-│   ├── classifier.py       ← Claude API email classification
+│   ├── classifier.py       ← Groq API email classification
 │   ├── tracker.py          ← SQLite persistence layer
-│   ├── reporter.py         ← Claude API rejection analysis
+│   ├── reporter.py         ← Groq API rejection analysis
 │   └── server.py           ← Flask API + dashboard server
 └── web/
     └── index.html          ← Local web dashboard
