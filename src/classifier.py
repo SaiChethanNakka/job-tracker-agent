@@ -10,7 +10,7 @@ import os
 import time
 from typing import Optional, List
 
-from google import genai
+from groq import Groq
 
 logger = logging.getLogger(__name__)
 
@@ -50,14 +50,11 @@ Body: {body_text}
 
 class EmailClassifier:
     def __init__(self):
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
-            raise ValueError(
-                "GEMINI_API_KEY not set.\n"
-                "Get a free key at: https://aistudio.google.com"
-            )
-        self.client = genai.Client(api_key=api_key)
-        self.model = "gemini-2.0-flash"
+            raise ValueError("GROQ_API_KEY not set.")
+        self.client = Groq(api_key=api_key)
+        self.model = "llama-3.3-70b-versatile"
 
     def classify(self, email: dict) -> Optional[dict]:
         prompt = CLASSIFY_PROMPT_TEMPLATE.format(
@@ -67,40 +64,19 @@ class EmailClassifier:
             snippet=email.get("snippet", ""),
             body_text=email.get("body_text", "")[:2000],
         )
-
         try:
-            response = self.client.models.generate_content(
+            response = self.client.chat.completions.create(
                 model=self.model,
-                contents=prompt,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
             )
-            raw = response.text.strip()
+            raw = response.choices[0].message.content.strip()
             raw = raw.replace("```json", "").replace("```", "").strip()
             classification = json.loads(raw)
-
             if classification.get("email_type") not in EMAIL_TYPES:
                 classification["email_type"] = "IRRELEVANT"
-
             return {**email, **classification}
-
         except Exception as e:
-            err_str = str(e)
-            if "429" in err_str or "quota" in err_str.lower():
-                logger.warning("Rate limit hit — waiting 60 seconds before retrying...")
-                time.sleep(60)
-                try:
-                    response = self.client.models.generate_content(
-                        model=self.model,
-                        contents=prompt,
-                    )
-                    raw = response.text.strip()
-                    raw = raw.replace("```json", "").replace("```", "").strip()
-                    classification = json.loads(raw)
-                    if classification.get("email_type") not in EMAIL_TYPES:
-                        classification["email_type"] = "IRRELEVANT"
-                    return {**email, **classification}
-                except Exception as e2:
-                    logger.error(f"Retry also failed for '{email.get('subject')}': {e2}")
-                    return None
             logger.error(f"Classification failed for '{email.get('subject')}': {e}")
             return None
 

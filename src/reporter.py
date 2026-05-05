@@ -9,7 +9,7 @@ import os
 from datetime import datetime
 from typing import List, Optional
 
-from google import genai
+from groq import Groq
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +48,11 @@ Return this exact JSON:
 
 class ReportGenerator:
     def __init__(self):
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
-            raise ValueError("GEMINI_API_KEY not set.")
-        self.client = genai.Client(api_key=api_key)
-        self.model = "gemini-2.0-flash"
+            raise ValueError("GROQ_API_KEY not set.")
+        self.client = Groq(api_key=api_key)
+        self.model = "llama-3.3-70b-versatile"
 
     def generate_analysis_report(self, rejections: List[dict], funnel_stats: dict) -> dict:
         if not rejections:
@@ -68,15 +68,16 @@ class ReportGenerator:
         )
 
         try:
-            response = self.client.models.generate_content(
+            response = self.client.chat.completions.create(
                 model=self.model,
-                contents=prompt,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
             )
-            raw = response.text.strip()
+            raw = response.choices[0].message.content.strip()
             raw = raw.replace("```json", "").replace("```", "").strip()
             return json.loads(raw)
         except Exception as e:
-            logger.error(f"Report generation failed: {e}")
+            logger.error(f"Report failed: {e}")
             return self._empty_report()
 
     def to_markdown(self, analysis: dict, funnel_stats: dict, report_date: Optional[str] = None) -> str:
