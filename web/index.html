@@ -865,7 +865,7 @@
   <aside class="sidebar">
     <div class="logo">
       <div class="logo-mark">JobTracker</div>
-      <div class="logo-sub">Sai Chethan Nakka</div>
+      <div class="logo-sub" id="userNameLabel">loading...</div>
     </div>
 
     <nav>
@@ -901,7 +901,7 @@
     <!-- Dashboard -->
     <div id="page-dashboard" class="page active">
       <div class="page-header">
-        <div class="page-title">Dashboard</div>
+        <div class="page-title" id="dashGreeting">Dashboard</div>
         <div class="page-subtitle" id="dash-date">Loading...</div>
       </div>
 
@@ -1323,6 +1323,7 @@ async function uploadResume(file) {
     if (data.success) {
       toast('✓ Resume uploaded and analyzed');
       document.getElementById('versionLabelInput').value = '';
+      loadUserName();
       loadResumePage();
     } else {
       toast(data.error || 'Upload failed', true);
@@ -1442,8 +1443,30 @@ async function activateVersion(id) {
   }
 }
 
+// ── Load User Name ──
+async function loadUserName() {
+  try {
+    const data = await fetch(API + '/resume/active').then(r => r.json());
+    const nameEl = document.getElementById('userNameLabel');
+    const greetEl = document.getElementById('dashGreeting');
+    if (data.active && data.resume && data.resume.candidate_name) {
+      const name = data.resume.candidate_name;
+      const firstName = name.split(' ')[0];
+      nameEl.textContent = name;
+      document.title = `Job Tracker — ${name}`;
+      greetEl.textContent = `Welcome back, ${firstName}`;
+    } else {
+      nameEl.textContent = 'Upload resume to personalize';
+      greetEl.textContent = 'Dashboard';
+    }
+  } catch(e) {
+    document.getElementById('userNameLabel').textContent = 'Job Tracker';
+  }
+}
+
 // ── Init ──
 setupUploadZone();
+loadUserName();
 loadDashboard();
 </script>
 </body>

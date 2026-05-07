@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS resume_versions (
     filename TEXT NOT NULL,
     uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
     is_active INTEGER DEFAULT 1,
+    candidate_name TEXT DEFAULT '',
     raw_text TEXT,
     keywords TEXT,
     tone TEXT,
@@ -107,6 +108,11 @@ class ApplicationTracker:
         # Add resume_version_id column to existing applications table if missing
         try:
             cursor.execute(ADD_RESUME_VERSION_COLUMN_SQL)
+        except Exception:
+            pass  # Column already exists
+        # Add candidate_name column to existing resume_versions table if missing
+        try:
+            cursor.execute("ALTER TABLE resume_versions ADD COLUMN candidate_name TEXT DEFAULT ''")
         except Exception:
             pass  # Column already exists
         self.conn.commit()
@@ -331,13 +337,14 @@ class ApplicationTracker:
         cursor.execute(
             """
             INSERT INTO resume_versions
-                (version_label, filename, raw_text, keywords, tone,
+                (version_label, filename, candidate_name, raw_text, keywords, tone,
                  experience_level, key_sections, known_gaps, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
             """,
             (
                 version_label,
                 data.get("filename", "resume.pdf"),
+                data.get("candidate_name", ""),
                 data.get("raw_text", ""),
                 _json.dumps(data.get("keywords", [])),
                 data.get("tone", ""),

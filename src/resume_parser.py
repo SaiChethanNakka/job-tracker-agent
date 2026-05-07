@@ -22,6 +22,7 @@ RESUME TEXT:
 
 Return this exact JSON:
 {{
+  "candidate_name": "the full name of the person this resume belongs to",
   "keywords": ["list of every technical skill, tool, framework, language, platform mentioned"],
   "tone": "one-sentence description of the resume's overall tone and writing style",
   "experience_level": "one of: junior | mid | mid-senior | senior | staff | principal",
@@ -89,6 +90,7 @@ class ResumeParser:
         except Exception as e:
             logger.error(f"Resume analysis failed: {e}")
             return {
+                "candidate_name": "",
                 "keywords": [],
                 "tone": "Could not analyze",
                 "experience_level": "unknown",
@@ -113,6 +115,7 @@ class ResumeParser:
 
         return {
             "raw_text": raw_text,
+            "candidate_name": analysis.get("candidate_name", ""),
             "keywords": analysis.get("keywords", []),
             "tone": analysis.get("tone", ""),
             "experience_level": analysis.get("experience_level", "unknown"),
