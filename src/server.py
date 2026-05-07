@@ -245,6 +245,6 @@ def static_files(path):
 
 
 if __name__ == "__main__":
-    print("\n🚀 Job Tracker Dashboard running at: http://localhost:5050\n")
+    print("\n[*] Job Tracker Dashboard running at: http://localhost:5050\n")
     app.run(host="0.0.0.0", port=5050, debug=False)
 
