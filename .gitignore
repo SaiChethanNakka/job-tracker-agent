@@ -7,6 +7,7 @@ agent.log
 # Generated data
 db/
 reports/
+resumes/
 agent.log
 *.log
 

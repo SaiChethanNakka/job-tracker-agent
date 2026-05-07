@@ -701,6 +701,160 @@
     gap: 20px;
     margin-bottom: 28px;
   }
+
+  /* ── Resume Page ── */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 48px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    background: var(--surface);
+    margin-bottom: 28px;
+  }
+
+  .upload-zone:hover, .upload-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(0,229,255,0.04);
+  }
+
+  .upload-zone .upload-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+    opacity: 0.6;
+  }
+
+  .upload-zone .upload-text {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .upload-zone .upload-hint {
+    font-size: 11px;
+    color: var(--muted);
+    opacity: 0.6;
+  }
+
+  .upload-zone.uploading {
+    pointer-events: none;
+    opacity: 0.6;
+  }
+
+  .version-label-input {
+    padding: 8px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    margin-bottom: 16px;
+    width: 260px;
+    outline: none;
+  }
+
+  .version-label-input:focus { border-color: var(--accent); }
+
+  .resume-versions-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .resume-detail-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 28px;
+    margin-top: 20px;
+  }
+
+  .keywords-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .keyword-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    background: rgba(0,229,255,0.08);
+    border: 1px solid rgba(0,229,255,0.25);
+    border-radius: 100px;
+    font-size: 11px;
+    color: var(--accent);
+  }
+
+  .gap-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    background: rgba(255,68,68,0.08);
+    border: 1px solid rgba(255,68,68,0.25);
+    border-radius: 100px;
+    font-size: 11px;
+    color: var(--danger);
+  }
+
+  .metric-row {
+    display: flex;
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  .metric-box {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .metric-box .metric-val {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 28px;
+    line-height: 1;
+  }
+
+  .metric-box .metric-lbl {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  .active-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 100px;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--accent);
+    border: 1px solid rgba(0,229,255,0.3);
+    background: rgba(0,229,255,0.08);
+  }
+
+  .activate-btn {
+    padding: 4px 12px;
+    background: rgba(0,229,255,0.1);
+    border: 1px solid rgba(0,229,255,0.3);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+
+  .activate-btn:hover {
+    background: rgba(0,229,255,0.18);
+    border-color: var(--accent);
+  }
 </style>
 </head>
 <body>
@@ -728,6 +882,11 @@
       <div class="nav-section" style="margin-top:16px">Intelligence</div>
       <div class="nav-item" data-page="reports" onclick="navigate('reports', this)">
         <span class="nav-icon">◉</span> Analysis Reports
+      </div>
+
+      <div class="nav-section" style="margin-top:16px">Resume</div>
+      <div class="nav-item" data-page="resume" onclick="navigate('resume', this)">
+        <span class="nav-icon">◆</span> Resume Versions
       </div>
     </nav>
 
@@ -780,6 +939,7 @@
                 <th>Applied</th>
                 <th>Last Activity</th>
                 <th>Events</th>
+                <th>Resume</th>
               </tr>
             </thead>
             <tbody id="appsTableBody">
@@ -799,6 +959,46 @@
       <button class="gen-btn" id="genBtn" onclick="generateReport()">⚡ Generate Report Now</button>
       <div id="reportsList" class="reports-list"></div>
       <div id="reportContent" class="report-content-wrap"></div>
+    </div>
+
+    <!-- Resume -->
+    <div id="page-resume" class="page">
+      <div class="page-header">
+        <div class="page-title">Resume Versions</div>
+        <div class="page-subtitle">Upload your resume to enable data-driven rejection analysis</div>
+      </div>
+
+      <input class="version-label-input" id="versionLabelInput" placeholder="Version label (optional, e.g. v3 - added K8s)">
+      <div class="upload-zone" id="uploadZone">
+        <div class="upload-icon">📄</div>
+        <div class="upload-text">Drop your resume PDF here or click to upload</div>
+        <div class="upload-hint">PDF files only • becomes the active resume for new applications</div>
+      </div>
+      <input type="file" id="resumeFileInput" accept=".pdf" style="display:none">
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-title">All Versions</div>
+        <div class="table-wrap">
+          <table class="resume-versions-table">
+            <thead>
+              <tr>
+                <th>Version</th>
+                <th>Filename</th>
+                <th>Uploaded</th>
+                <th>Applications</th>
+                <th>Rejection Rate</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="resumeVersionsBody">
+              <tr><td colspan="7"><div class="loading"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="resumeDetailPanel" class="resume-detail-panel" style="display:none"></div>
     </div>
 
   </main>
@@ -829,6 +1029,7 @@ function navigate(page, el) {
   if (page === 'dashboard') loadDashboard();
   if (page === 'applications') loadApplications();
   if (page === 'reports') loadReports();
+  if (page === 'resume') loadResumePage();
 }
 
 // ── Toast ──
@@ -948,6 +1149,7 @@ function renderAppsTable(apps) {
       <td>${fmtDate(a.applied_date)}</td>
       <td>${fmtDate(a.last_activity_date)}</td>
       <td style="color:var(--muted)">${a.event_count}</td>
+      <td><span class="stage-pill">${a.resume_version || '—'}</span></td>
     </tr>`;
   }).join('');
 }
@@ -1082,7 +1284,166 @@ function escHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// ── Resume Page ──
+function setupUploadZone() {
+  const zone = document.getElementById('uploadZone');
+  const fileInput = document.getElementById('resumeFileInput');
+
+  zone.addEventListener('click', () => fileInput.click());
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) uploadResume(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) uploadResume(fileInput.files[0]);
+    fileInput.value = '';
+  });
+}
+
+async function uploadResume(file) {
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    toast('Only PDF files are supported', true);
+    return;
+  }
+  const zone = document.getElementById('uploadZone');
+  zone.classList.add('uploading');
+  zone.querySelector('.upload-text').textContent = '⏳ Uploading and analyzing...';
+
+  const formData = new FormData();
+  formData.append('file', file);
+  const label = document.getElementById('versionLabelInput').value.trim();
+  if (label) formData.append('version_label', label);
+
+  try {
+    const res = await fetch(API + '/resume/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.success) {
+      toast('✓ Resume uploaded and analyzed');
+      document.getElementById('versionLabelInput').value = '';
+      loadResumePage();
+    } else {
+      toast(data.error || 'Upload failed', true);
+    }
+  } catch(e) {
+    toast('Could not connect to server', true);
+  } finally {
+    zone.classList.remove('uploading');
+    zone.querySelector('.upload-text').textContent = 'Drop your resume PDF here or click to upload';
+  }
+}
+
+async function loadResumePage() {
+  const tbody = document.getElementById('resumeVersionsBody');
+  document.getElementById('resumeDetailPanel').style.display = 'none';
+  try {
+    const versions = await fetch(API + '/resume/versions').then(r => r.json());
+    if (!versions.length) {
+      tbody.innerHTML = `<tr><td colspan="7"><div class="empty">No resumes uploaded yet. Upload your first resume above.</div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = versions.map(v => {
+      const total = v.app_count || 0;
+      const rejRate = total > 0 ? Math.round((v.rejected_count || 0) / total * 100) : 0;
+      const statusBadge = v.is_active
+        ? '<span class="active-badge">● Active</span>'
+        : `<button class="activate-btn" onclick="activateVersion(${v.id})">Set Active</button>`;
+      return `<tr class="clickable" onclick="showResumeDetail(${v.id})">
+        <td><strong>${escHtml(v.version_label)}</strong></td>
+        <td style="color:var(--muted)">${escHtml(v.filename)}</td>
+        <td>${fmtDate(v.uploaded_at)}</td>
+        <td style="text-align:center">${total}</td>
+        <td style="text-align:center;color:${rejRate > 50 ? 'var(--danger)' : 'var(--muted)'}">${total > 0 ? rejRate + '%' : '—'}</td>
+        <td>${statusBadge}</td>
+        <td style="color:var(--muted);font-size:18px">›</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty">Could not load resume versions.</div></td></tr>`;
+  }
+}
+
+async function showResumeDetail(versionId) {
+  const panel = document.getElementById('resumeDetailPanel');
+  panel.style.display = 'block';
+  panel.innerHTML = '<div class="loading"></div>';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  try {
+    const data = await fetch(`${API}/resume/versions/${versionId}`).then(r => r.json());
+    const v = data.version;
+    const s = data.stats;
+    const keywords = JSON.parse(v.keywords || '[]');
+    const gaps = JSON.parse(v.known_gaps || '[]');
+
+    panel.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div>
+          <div style="font-family:var(--font-display);font-weight:800;font-size:20px;color:var(--accent)">${escHtml(v.version_label)}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">${escHtml(v.filename)} • uploaded ${fmtDate(v.uploaded_at)}</div>
+        </div>
+        ${v.is_active ? '<span class="active-badge">● Active</span>' : ''}
+      </div>
+
+      <div class="metric-row">
+        <div class="metric-box">
+          <div class="metric-val" style="color:var(--text)">${s.total || 0}</div>
+          <div class="metric-lbl">Applications</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val" style="color:var(--danger)">${s.rejection_rate || 0}%</div>
+          <div class="metric-lbl">Rejection Rate</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val" style="color:var(--success)">${s.offer_rate || 0}%</div>
+          <div class="metric-lbl">Offer Rate</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val" style="color:var(--accent)">${s.advancement_rate || 0}%</div>
+          <div class="metric-lbl">Advanced Stages</div>
+        </div>
+      </div>
+
+      <div style="margin-top:24px">
+        <div class="card-title">Tone</div>
+        <div style="font-size:13px;color:var(--text);margin-top:4px">${escHtml(v.tone || 'Not analyzed')}</div>
+      </div>
+
+      <div style="margin-top:20px">
+        <div class="card-title">Experience Level</div>
+        <div style="margin-top:4px"><span class="stage-pill">${escHtml(v.experience_level || 'unknown')}</span></div>
+      </div>
+
+      <div style="margin-top:20px">
+        <div class="card-title">Extracted Keywords (${keywords.length})</div>
+        <div class="keywords-wrap">${keywords.map(k => `<span class="keyword-pill">${escHtml(k)}</span>`).join('')}</div>
+      </div>
+
+      <div style="margin-top:20px">
+        <div class="card-title">Identified Gaps</div>
+        <div class="keywords-wrap">${gaps.length ? gaps.map(g => `<span class="gap-pill">${escHtml(g)}</span>`).join('') : '<span style="color:var(--muted);font-size:12px">None detected</span>'}</div>
+      </div>
+    `;
+  } catch(e) {
+    panel.innerHTML = '<div class="empty">Could not load resume details.</div>';
+  }
+}
+
+async function activateVersion(id) {
+  event.stopPropagation();
+  try {
+    await fetch(`${API}/resume/versions/${id}/activate`, { method: 'POST' });
+    toast('✓ Resume version activated');
+    loadResumePage();
+  } catch(e) {
+    toast('Activation failed', true);
+  }
+}
+
 // ── Init ──
+setupUploadZone();
 loadDashboard();
 </script>
 </body>

@@ -1,6 +1,6 @@
 # Job Application Tracker Agent
 
-AI-powered Gmail agent that tracks job applications, classifies recruiter emails, and generates weekly rejection pattern analysis with resume gap recommendations.
+AI-powered Gmail agent that tracks job applications, classifies recruiter emails, and generates data-driven rejection analysis with resume-aware gap recommendations.
 
 ## Architecture
 
@@ -11,7 +11,9 @@ EmailClassifier (Groq API)      → Labels each email with type, company, stage
     ↓
 ApplicationTracker (SQLite)     → Persists state machine per application
     ↓
-ReportGenerator (Groq API)      → Analyzes patterns, flags keyword gaps
+ResumeParser (PyMuPDF + Groq)   → Extracts keywords, tone, gaps from uploaded PDF
+    ↓
+ReportGenerator (Groq API)      → Analyzes patterns using real resume data
     ↓
 Flask Server + Web Dashboard    → Local UI at localhost:5050
 ```
@@ -91,8 +93,9 @@ Then open: [http://localhost:5050](http://localhost:5050)
 | Page | What it shows |
 |------|---------------|
 | **Dashboard** | Stats summary, application funnel, recent activity |
-| **All Applications** | Full table with stage, status, dates — click any row for email timeline |
-| **Analysis Reports** | AI-generated rejection pattern reports with resume gap recommendations |
+| **All Applications** | Full table with stage, status, resume version, dates — click any row for email timeline |
+| **Analysis Reports** | AI-generated rejection pattern reports using your actual resume data |
+| **Resume Versions** | Upload PDF resumes, view extracted keywords/tone/gaps, track per-version rejection rates |
 
 ---
 
@@ -157,15 +160,17 @@ job-tracker-agent/
 ├── requirements.txt
 ├── agent.log               ← Auto-generated run log
 ├── db/
-│   └── applications.db     ← SQLite database
+│   └── applications.db     ← SQLite database (applications + resume versions)
 ├── reports/
 │   └── YYYY-MM-DD.md       ← Generated Markdown reports
+├── resumes/                ← Uploaded resume PDFs (gitignored)
 ├── src/
 │   ├── agent.py            ← Main orchestrator + scheduler
 │   ├── gmail_client.py     ← Gmail OAuth + email fetching
 │   ├── classifier.py       ← Groq API email classification
 │   ├── tracker.py          ← SQLite persistence layer
-│   ├── reporter.py         ← Groq API rejection analysis
+│   ├── reporter.py         ← Groq API rejection analysis (resume-aware)
+│   ├── resume_parser.py    ← PDF text extraction + AI keyword/tone analysis
 │   └── server.py           ← Flask API + dashboard server
 └── web/
     └── index.html          ← Local web dashboard
@@ -173,22 +178,27 @@ job-tracker-agent/
 
 ---
 
-## Keeping Resume Keywords Current
+## Resume Versioning
 
-In `src/reporter.py`, update `MY_RESUME_KEYWORDS` whenever you update your resume:
+Instead of manually editing hardcoded keyword lists, the agent now extracts resume data automatically:
 
-```python
-MY_RESUME_KEYWORDS = [
-    "Java 17", "Spring Boot", "Kafka", "PostgreSQL", ...
-]
-```
+1. Go to the **Resume Versions** page in the dashboard
+2. Upload your current resume as a PDF
+3. The AI extracts: **keywords**, **tone**, **experience level**, and **skill gaps**
+4. All new applications are automatically linked to the active resume version
+5. When generating reports, the AI uses your **actual resume data** for more accurate gap analysis
 
-The agent cross-references this list against patterns it detects in rejection email contexts to flag gaps.
+You can upload multiple versions over time. Each version tracks:
+- How many applications were sent with that resume
+- Rejection rate, offer rate, and stage advancement rate
+- This lets you measure whether resume updates are actually improving your results
 
 ---
 
 ## Security Notes
 
-- `credentials.json` and `token.json` are local only — add both to `.gitignore` if you push this to GitHub
+- `credentials.json`, `token.json`, and `.env` are gitignored — your secrets never leave your machine
+- Uploaded resumes are saved locally in `resumes/` (also gitignored)
 - The agent uses `gmail.readonly` scope — it cannot send, delete, or modify any email
 - No email content is stored permanently — only extracted metadata (company, role, stage, summary) goes into SQLite
+- Resume text is sent to Groq API for analysis but is not stored on their servers beyond the API call

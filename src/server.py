@@ -15,18 +15,21 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from flask import Flask, jsonify, send_from_directory, abort
+from flask import Flask, jsonify, send_from_directory, abort, request
 from flask_cors import CORS
 
 sys.path.insert(0, str(Path(__file__).parent))
 from tracker import ApplicationTracker
 from reporter import ReportGenerator
+from resume_parser import ResumeParser
 
 logger = logging.getLogger(__name__)
 app = Flask(__name__, static_folder=str(Path(__file__).parent.parent / "web"))
 CORS(app)
 
 REPORTS_DIR = Path(__file__).parent.parent / "reports"
+RESUMES_DIR = Path(__file__).parent.parent / "resumes"
+RESUMES_DIR.mkdir(exist_ok=True)
 
 
 def get_tracker():
@@ -81,12 +84,23 @@ def api_report_detail(report_id):
 
 @app.route("/api/reports/generate", methods=["POST"])
 def api_generate_report():
-    """Manually trigger a report generation on demand."""
+    """Manually trigger a report generation on demand — uses active resume data."""
     tracker = get_tracker()
     reporter = ReportGenerator()
     funnel_stats = tracker.get_funnel_stats()
     rejections = tracker.get_rejection_data(limit=30)
-    analysis = reporter.generate_analysis_report(rejections, funnel_stats)
+
+    # Load active resume data for the report
+    resume_data = tracker.get_active_resume()
+    version_stats = None
+    if resume_data:
+        version_stats = tracker.get_resume_stats(resume_data["id"])
+
+    analysis = reporter.generate_analysis_report(
+        rejections, funnel_stats,
+        resume_data=resume_data,
+        version_stats=version_stats,
+    )
     report_md = reporter.to_markdown(analysis, funnel_stats)
     report_id = tracker.save_report(report_md, report_type="MANUAL")
 
@@ -119,8 +133,101 @@ def api_timeline():
             "applied_date": a["applied_date"],
             "last_activity": a["last_activity_date"],
             "event_count": a["event_count"],
+            "resume_version": a.get("resume_version"),
         })
     return jsonify(timeline)
+
+
+# ──────────────────────────────────────────────────────────────
+#  Resume Endpoints
+# ──────────────────────────────────────────────────────────────
+
+@app.route("/api/resume/upload", methods=["POST"])
+def api_resume_upload():
+    """Upload a PDF resume, extract text, analyze with AI, and save as a new version."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files["file"]
+    if not file.filename.lower().endswith(".pdf"):
+        return jsonify({"error": "Only PDF files are supported"}), 400
+
+    version_label = request.form.get("version_label", "").strip()
+
+    try:
+        pdf_bytes = file.read()
+
+        # Save the PDF file to disk
+        safe_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+        save_path = RESUMES_DIR / safe_name
+        with open(save_path, "wb") as f:
+            f.write(pdf_bytes)
+
+        # Parse and analyze
+        parser = ResumeParser()
+        result = parser.parse_and_analyze(pdf_bytes=pdf_bytes)
+        result["filename"] = file.filename
+        if version_label:
+            result["version_label"] = version_label
+
+        # Save to database
+        tracker = get_tracker()
+        version_id = tracker.save_resume_version(result)
+        version = tracker.get_resume_version(version_id)
+        tracker.close()
+
+        return jsonify({"success": True, "version": version})
+
+    except Exception as e:
+        logger.error(f"Resume upload failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/resume/versions")
+def api_resume_versions():
+    """List all resume versions with stats."""
+    tracker = get_tracker()
+    versions = tracker.get_all_resume_versions()
+    tracker.close()
+    return jsonify(versions)
+
+
+@app.route("/api/resume/active")
+def api_resume_active():
+    """Get the currently active resume version."""
+    tracker = get_tracker()
+    resume = tracker.get_active_resume()
+    stats = None
+    if resume:
+        stats = tracker.get_resume_stats(resume["id"])
+    tracker.close()
+    if not resume:
+        return jsonify({"active": False})
+    return jsonify({"active": True, "resume": resume, "stats": stats})
+
+
+@app.route("/api/resume/versions/<int:version_id>")
+def api_resume_version_detail(version_id):
+    """Get a specific resume version with its performance stats."""
+    tracker = get_tracker()
+    version = tracker.get_resume_version(version_id)
+    if not version:
+        tracker.close()
+        abort(404)
+    stats = tracker.get_resume_stats(version_id)
+    tracker.close()
+    return jsonify({"version": version, "stats": stats})
+
+
+@app.route("/api/resume/versions/<int:version_id>/activate", methods=["POST"])
+def api_resume_activate(version_id):
+    """Set a specific resume version as the active one."""
+    tracker = get_tracker()
+    success = tracker.activate_resume_version(version_id)
+    tracker.close()
+    if not success:
+        abort(404)
+    return jsonify({"success": True})
 
 
 # ──────────────────────────────────────────────────────────────
@@ -140,3 +247,4 @@ def static_files(path):
 if __name__ == "__main__":
     print("\n🚀 Job Tracker Dashboard running at: http://localhost:5050\n")
     app.run(host="0.0.0.0", port=5050, debug=False)
+

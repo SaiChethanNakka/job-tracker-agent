@@ -70,6 +70,26 @@ CREATE TABLE IF NOT EXISTS reports (
 );
 """
 
+CREATE_RESUME_VERSIONS_SQL = """
+CREATE TABLE IF NOT EXISTS resume_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    version_label TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    is_active INTEGER DEFAULT 1,
+    raw_text TEXT,
+    keywords TEXT,
+    tone TEXT,
+    experience_level TEXT,
+    key_sections TEXT,
+    known_gaps TEXT
+);
+"""
+
+ADD_RESUME_VERSION_COLUMN_SQL = """
+ALTER TABLE applications ADD COLUMN resume_version_id INTEGER REFERENCES resume_versions(id);
+"""
+
 
 class ApplicationTracker:
     def __init__(self):
@@ -80,7 +100,15 @@ class ApplicationTracker:
 
     def _init_schema(self):
         cursor = self.conn.cursor()
-        cursor.executescript(CREATE_APPLICATIONS_SQL + CREATE_EVENTS_SQL + CREATE_REPORTS_SQL)
+        cursor.executescript(
+            CREATE_APPLICATIONS_SQL + CREATE_EVENTS_SQL +
+            CREATE_REPORTS_SQL + CREATE_RESUME_VERSIONS_SQL
+        )
+        # Add resume_version_id column to existing applications table if missing
+        try:
+            cursor.execute(ADD_RESUME_VERSION_COLUMN_SQL)
+        except Exception:
+            pass  # Column already exists
         self.conn.commit()
 
     def upsert_from_classified_email(self, classified: dict) -> Optional[int]:
@@ -165,10 +193,13 @@ class ApplicationTracker:
 
     def _create_application(self, company: str, role: Optional[str], classified: dict) -> int:
         cursor = self.conn.cursor()
+        # Link to currently active resume version
+        active_resume = self.get_active_resume()
+        resume_version_id = active_resume["id"] if active_resume else None
         cursor.execute(
             """
-            INSERT INTO applications (company, role, current_stage, status, applied_date, last_activity_date)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO applications (company, role, current_stage, status, applied_date, last_activity_date, resume_version_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 company,
@@ -177,6 +208,7 @@ class ApplicationTracker:
                 "ACTIVE",
                 classified.get("date"),
                 classified.get("date"),
+                resume_version_id,
             ),
         )
         self.conn.commit()
@@ -214,9 +246,11 @@ class ApplicationTracker:
         cursor = self.conn.cursor()
         cursor.execute("""
             SELECT a.*, 
-                   COUNT(e.id) as event_count
+                   COUNT(e.id) as event_count,
+                   rv.version_label as resume_version
             FROM applications a
             LEFT JOIN application_events e ON e.application_id = a.id
+            LEFT JOIN resume_versions rv ON a.resume_version_id = rv.id
             GROUP BY a.id
             ORDER BY a.last_activity_date DESC
         """)
@@ -281,6 +315,99 @@ class ApplicationTracker:
         cursor.execute("SELECT * FROM reports WHERE id = ?", (report_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
+
+    # ── Resume Version Methods ──────────────────────────────────
+
+    def save_resume_version(self, data: dict) -> int:
+        """Save a new resume version and deactivate all previous versions."""
+        import json as _json
+        cursor = self.conn.cursor()
+        # Deactivate all existing versions
+        cursor.execute("UPDATE resume_versions SET is_active = 0")
+        # Count existing versions for auto-labeling
+        cursor.execute("SELECT COUNT(*) as cnt FROM resume_versions")
+        count = cursor.fetchone()["cnt"]
+        version_label = data.get("version_label") or f"v{count + 1}"
+        cursor.execute(
+            """
+            INSERT INTO resume_versions
+                (version_label, filename, raw_text, keywords, tone,
+                 experience_level, key_sections, known_gaps, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            """,
+            (
+                version_label,
+                data.get("filename", "resume.pdf"),
+                data.get("raw_text", ""),
+                _json.dumps(data.get("keywords", [])),
+                data.get("tone", ""),
+                data.get("experience_level", "unknown"),
+                _json.dumps(data.get("key_sections", {})),
+                _json.dumps(data.get("known_gaps", [])),
+            ),
+        )
+        self.conn.commit()
+        logger.info(f"Saved resume version '{version_label}' (id={cursor.lastrowid})")
+        return cursor.lastrowid
+
+    def get_active_resume(self) -> Optional[dict]:
+        """Returns the currently active resume version, or None."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM resume_versions WHERE is_active = 1 LIMIT 1")
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_all_resume_versions(self) -> List[dict]:
+        """List all resume versions with application counts."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT rv.*,
+                   COUNT(a.id) as app_count,
+                   SUM(CASE WHEN a.status = 'REJECTED' THEN 1 ELSE 0 END) as rejected_count,
+                   SUM(CASE WHEN a.status = 'OFFER' THEN 1 ELSE 0 END) as offer_count,
+                   SUM(CASE WHEN a.status = 'ACTIVE' THEN 1 ELSE 0 END) as active_count
+            FROM resume_versions rv
+            LEFT JOIN applications a ON a.resume_version_id = rv.id
+            GROUP BY rv.id
+            ORDER BY rv.uploaded_at DESC
+        """)
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_resume_version(self, version_id: int) -> Optional[dict]:
+        """Get a specific resume version by ID."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM resume_versions WHERE id = ?", (version_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def activate_resume_version(self, version_id: int) -> bool:
+        """Set a specific version as the active one."""
+        cursor = self.conn.cursor()
+        cursor.execute("UPDATE resume_versions SET is_active = 0")
+        cursor.execute("UPDATE resume_versions SET is_active = 1 WHERE id = ?", (version_id,))
+        self.conn.commit()
+        return cursor.rowcount > 0
+
+    def get_resume_stats(self, version_id: int) -> dict:
+        """Get rejection/success rates for applications linked to a specific resume version."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'REJECTED' THEN 1 ELSE 0 END) as rejected,
+                SUM(CASE WHEN status = 'OFFER' THEN 1 ELSE 0 END) as offers,
+                SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) as active,
+                SUM(CASE WHEN current_stage IN ('PHONE_SCREEN','TECHNICAL','HIRING_MANAGER','BAR_RAISER') THEN 1 ELSE 0 END) as advanced_stages
+            FROM applications
+            WHERE resume_version_id = ?
+        """, (version_id,))
+        row = cursor.fetchone()
+        stats = dict(row)
+        total = stats["total"] or 0
+        stats["rejection_rate"] = round((stats["rejected"] or 0) / total * 100, 1) if total > 0 else 0
+        stats["offer_rate"] = round((stats["offers"] or 0) / total * 100, 1) if total > 0 else 0
+        stats["advancement_rate"] = round((stats["advanced_stages"] or 0) / total * 100, 1) if total > 0 else 0
+        return stats
 
     def close(self):
         self.conn.close()

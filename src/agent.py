@@ -84,7 +84,19 @@ def run_daily_scan(days_back: int = 1):
     logger.info("Step 4/4 — Generating analysis report...")
     funnel_stats = tracker.get_funnel_stats()
     rejections = tracker.get_rejection_data(limit=30)
-    analysis = reporter.generate_analysis_report(rejections, funnel_stats)
+
+    # Load active resume data for smarter analysis
+    resume_data = tracker.get_active_resume()
+    version_stats = None
+    if resume_data:
+        version_stats = tracker.get_resume_stats(resume_data["id"])
+        logger.info(f"  Using resume version: {resume_data.get('version_label', '?')}")
+
+    analysis = reporter.generate_analysis_report(
+        rejections, funnel_stats,
+        resume_data=resume_data,
+        version_stats=version_stats,
+    )
     report_md = reporter.to_markdown(analysis, funnel_stats)
 
     # Save to file

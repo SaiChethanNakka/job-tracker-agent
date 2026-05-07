@@ -1,6 +1,7 @@
 """
 reporter.py
-Generates AI-powered rejection analysis using Google Gemini (new google-genai SDK).
+Generates AI-powered rejection analysis using Groq API.
+Uses dynamic resume data when available, falls back to defaults.
 """
 
 import json
@@ -13,7 +14,8 @@ from groq import Groq
 
 logger = logging.getLogger(__name__)
 
-MY_RESUME_KEYWORDS = [
+# Fallback defaults — used only when no resume has been uploaded
+DEFAULT_RESUME_KEYWORDS = [
     "Java 17", "Spring Boot", "Spring WebClient", "Spring Cache",
     "Python", "FastAPI", "Kafka", "PostgreSQL", "REST APIs",
     "Microservices", "Docker", "AWS", "H2O MOJO", "CatBoost",
@@ -21,15 +23,18 @@ MY_RESUME_KEYWORDS = [
     "Machine Learning pipeline", "Credit decisioning", "Loan origination",
 ]
 
-KNOWN_GAPS = ["Redis", "Airflow", "Elasticsearch", "Kubernetes", "gRPC", "Spark"]
+DEFAULT_KNOWN_GAPS = ["Redis", "Airflow", "Elasticsearch", "Kubernetes", "gRPC", "Spark"]
 
 ANALYSIS_PROMPT_TEMPLATE = """You are an expert technical recruiter and resume coach 
 specializing in fintech and backend engineering roles.
 Analyze these job application rejections and provide actionable resume improvement advice.
 Respond ONLY with a valid JSON object - no markdown fences, no preamble.
 
-MY RESUME KEYWORDS: {my_keywords}
+RESUME VERSION: {resume_version}
+RESUME KEYWORDS: {my_keywords}
+RESUME TONE: {resume_tone}
 KNOWN GAPS: {known_gaps}
+{version_performance}
 RECENT REJECTIONS ({count} total): {rejections_json}
 FUNNEL STATS: {funnel_json}
 
@@ -54,14 +59,46 @@ class ReportGenerator:
         self.client = Groq(api_key=api_key)
         self.model = "llama-3.3-70b-versatile"
 
-    def generate_analysis_report(self, rejections: List[dict], funnel_stats: dict) -> dict:
+    def generate_analysis_report(
+        self,
+        rejections: List[dict],
+        funnel_stats: dict,
+        resume_data: Optional[dict] = None,
+        version_stats: Optional[dict] = None,
+    ) -> dict:
         if not rejections:
             logger.info("No rejections to analyze yet.")
             return self._empty_report()
 
+        # Use dynamic resume data if available, otherwise fall back to defaults
+        if resume_data:
+            keywords_list = json.loads(resume_data.get("keywords", "[]")) if isinstance(resume_data.get("keywords"), str) else resume_data.get("keywords", [])
+            gaps_list = json.loads(resume_data.get("known_gaps", "[]")) if isinstance(resume_data.get("known_gaps"), str) else resume_data.get("known_gaps", [])
+            resume_version = resume_data.get("version_label", "unknown")
+            resume_tone = resume_data.get("tone", "not analyzed")
+        else:
+            keywords_list = DEFAULT_RESUME_KEYWORDS
+            gaps_list = DEFAULT_KNOWN_GAPS
+            resume_version = "no resume uploaded"
+            resume_tone = "not analyzed"
+
+        # Build version performance context string
+        version_perf = ""
+        if version_stats:
+            version_perf = (
+                f"RESUME VERSION PERFORMANCE: "
+                f"{version_stats.get('total', 0)} applications, "
+                f"{version_stats.get('rejection_rate', 0)}% rejection rate, "
+                f"{version_stats.get('offer_rate', 0)}% offer rate, "
+                f"{version_stats.get('advancement_rate', 0)}% advanced past initial screen"
+            )
+
         prompt = ANALYSIS_PROMPT_TEMPLATE.format(
-            my_keywords=", ".join(MY_RESUME_KEYWORDS),
-            known_gaps=", ".join(KNOWN_GAPS),
+            resume_version=resume_version,
+            my_keywords=", ".join(keywords_list),
+            resume_tone=resume_tone,
+            known_gaps=", ".join(gaps_list),
+            version_performance=version_perf,
             count=len(rejections),
             rejections_json=json.dumps(rejections, indent=2),
             funnel_json=json.dumps(funnel_stats, indent=2),
