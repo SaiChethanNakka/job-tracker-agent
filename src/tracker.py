@@ -195,15 +195,15 @@ class ApplicationTracker:
         new_order = STAGE_ORDER.get(new_stage, -1)
 
         new_status = row["status"]
-        if email_type == "REJECTION":
+        if email_type == "REJECTION" or new_stage == "REJECTED":
             new_status = "REJECTED"
             new_stage = "REJECTED"
-        elif email_type == "OFFER":
+        elif email_type == "OFFER" or new_stage == "OFFER":
             new_status = "OFFER"
             new_stage = "OFFER"
 
         # Only advance if new stage is further along
-        if new_order > current_order or email_type in ("REJECTION", "OFFER"):
+        if new_order > current_order or new_stage in ("REJECTED", "OFFER"):
             cursor.execute(
                 "UPDATE applications SET current_stage = ?, status = ?, updated_at = ? WHERE id = ?",
                 (new_stage, new_status, datetime.now().isoformat(), app_id),
